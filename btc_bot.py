@@ -84,7 +84,7 @@ def claude_decide(market, live_price):
         from typing import Any, cast
 
         block = message.content[0]
-        block_any = cast(Any, block)
+        block_any = cast("Any", block)
 
         text_val = getattr(block_any, "text", None)
         if text_val is None:

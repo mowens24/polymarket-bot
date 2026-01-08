@@ -2,6 +2,8 @@
 
 This repository contains a crowd-following trading bot for 15-minute BTC markets on Polymarket.
 
+[![CI](https://github.com/mowens24/polymarket-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/mowens24/polymarket-bot/actions/workflows/ci.yml)
+
 Quickstart
 
 1. Create a virtual environment and install dependencies:
