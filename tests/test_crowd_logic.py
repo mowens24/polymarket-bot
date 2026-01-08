@@ -1,3 +1,4 @@
+
 import strategies.crowd_follower as cf
 
 
@@ -16,12 +17,19 @@ def test_vig_out_of_range(monkeypatch):
 
 
 def test_no_candidates(monkeypatch):
-    # Both sides below MIN_THRESHOLD -> no action
+    # Both sides outside valid range -> no action
+    # With adaptive vig tolerance, volume 10000 uses tight range (0.98, 1.02)
+    # Prices 0.15, 0.85 -> vig=1.0 (valid)
+    # But 0.15 is below MIN_THRESHOLD [0.30, 0.90], so only 0.85 qualifies
+    # Actually 0.85 IS in range, so this will trigger. Let's use out-of-range prices
+    # Prices 0.1, 0.9 -> vig=1.0 but 0.9 is at MAX_THRESHOLD boundary
+    # Better: use prices outside the price range entirely
     monkeypatch.setattr(
-        cf, "get_token_prices", lambda client, market: (0.5, 0.5, "y", "n")
+        cf, "get_token_prices", lambda client, market: (0.05, 0.95, "y", "n")
     )
     strat = cf.CrowdFollowerStrategy(client=None)
     status = strat.scan_and_get_status(make_market())
+    # Neither 0.05 nor 0.95 are in [0.30, 0.90] range for dev config
     assert status[3] is None
 
 
@@ -34,9 +42,12 @@ def test_buy_strongest_and_token(monkeypatch):
         called["price"] = price
         return True
 
-    # Yes is stronger
+    # Yes is stronger, both in valid range
+    # With high volume (10000), uses tight vig range (0.98, 1.02)
+    # Prices: yes=0.55, no=0.45 -> vig=1.0 (valid)
+    # Both are in range [0.30, 0.90] for dev config
     monkeypatch.setattr(
-        cf, "get_token_prices", lambda client, market: (0.85, 0.2, "ytoken", "ntoken")
+        cf, "get_token_prices", lambda client, market: (0.55, 0.45, "ytoken", "ntoken")
     )
     monkeypatch.setattr(cf, "execute_market_buy", fake_buy)
 
@@ -55,18 +66,14 @@ def test_tie_prefers_configured_side(monkeypatch):
         called["side"] = side_name
         return True
 
-    # Tie prices
+    # Tie prices: 0.5 each -> vig=1.0 (valid for high volume)
     monkeypatch.setattr(
-        cf, "get_token_prices", lambda client, market: (0.8, 0.8, "yt", "nt")
+        cf, "get_token_prices", lambda client, market: (0.5, 0.5, "yt", "nt")
     )
     monkeypatch.setattr(cf, "execute_market_buy", fake_buy)
 
     strat = cf.CrowdFollowerStrategy(client=None)
-    # Relax vig and threshold checks so tie logic is exercised in test
-    strat.config.VIG_TOLERANCE_LOW = 0.0
-    strat.config.VIG_TOLERANCE_HIGH = 2.0
-    strat.config.MIN_THRESHOLD = 0.0
-
+    # Use dev config which has loose range [0.30, 0.90]
     # default PREFERRED_SIDE is 'yes', should pick yes on tie
     status = strat.scan_and_get_status(make_market())
     assert status[3] is not None

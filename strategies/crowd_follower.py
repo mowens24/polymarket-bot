@@ -1,4 +1,4 @@
-# strategies/crowd_follower.py - Strategy logic
+# strategies/crowd_follower.py - Strategy logic with adaptive vig tolerance
 
 from typing import Optional, Tuple
 
@@ -8,8 +8,7 @@ from config import (
     MIN_THRESHOLD,
     MIN_VOLUME,
     PREFERRED_SIDE,
-    VIG_TOLERANCE_HIGH,
-    VIG_TOLERANCE_LOW,
+    get_vig_tolerance,
 )
 from execution import execute_market_buy
 from logger import log_info
@@ -28,8 +27,6 @@ class CrowdFollowerStrategy:
                 "MIN_THRESHOLD": MIN_THRESHOLD,
                 "MAX_THRESHOLD": MAX_THRESHOLD,
                 "PREFERRED_SIDE": PREFERRED_SIDE,
-                "VIG_TOLERANCE_LOW": VIG_TOLERANCE_LOW,
-                "VIG_TOLERANCE_HIGH": VIG_TOLERANCE_HIGH,
                 "MAX_BET_USD": MAX_BET_USD,
             },
         )()
@@ -55,8 +52,12 @@ class CrowdFollowerStrategy:
             f"Yes (Up): ${yes_price:.4f} | No (Down): ${no_price:.4f} | Vig: {vig:.3f}"
         )
 
-        if not (self.config.VIG_TOLERANCE_LOW <= vig <= self.config.VIG_TOLERANCE_HIGH):
-            log_info("Vig out of range - skipping")
+        # Use adaptive vig tolerance based on volume
+        vig_tolerance = get_vig_tolerance(vol)
+        if not (vig_tolerance[0] <= vig <= vig_tolerance[1]):
+            log_info(
+                f"Vig {vig:.3f} out of range {vig_tolerance} for volume {vol:.0f} - skipping"
+            )
             return (yes_price, no_price), vig, vol, None
 
         candidates = []

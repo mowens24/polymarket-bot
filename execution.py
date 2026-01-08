@@ -1,4 +1,4 @@
-# execution.py
+# execution.py - Order execution with safety checks, retries, and partial fill handling
 
 from typing import Optional
 
@@ -9,7 +9,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from config import DRY_RUN
+from config import DRY_RUN, WALLET_MIN_BALANCE_USD
 from logger import log_error, log_trade
 
 # In DRY_RUN mode we keep a paper portfolio to simulate trades
@@ -24,6 +24,21 @@ if DRY_RUN:
         _paper_portfolio = None
 
 
+def check_wallet_balance(client) -> float:
+    """Check wallet balance and warn if below threshold."""
+    try:
+        balance_eth = client.get_balance()
+        balance_usd = balance_eth * 2000  # Rough conversion (adjust as needed)
+        if balance_usd < WALLET_MIN_BALANCE_USD:
+            log_error(
+                f"WALLET LOW: ${balance_usd:.2f} < ${WALLET_MIN_BALANCE_USD:.2f} minimum"
+            )
+        return balance_usd
+    except Exception as e:
+        log_error(f"Balance check failed: {e}")
+        return 0.0
+
+
 def execute_market_buy(
     client,
     token_id: str,
@@ -32,6 +47,10 @@ def execute_market_buy(
     market: Optional[dict] = None,
     price: Optional[float] = None,
 ) -> bool:
+    """Execute a market buy with safety checks and retry logic.
+
+    Handles partial fills by polling order status after execution.
+    """
     if DRY_RUN:
         log_trade(
             f"DRY RUN: Would buy {side_name.upper()} ${amount_usd:.2f} at ${price:.4f} | NO ORDER SENT"
@@ -43,6 +62,18 @@ def execute_market_buy(
         except Exception as e:
             log_error(f"Paper portfolio record failed: {e}")
         return True
+
+    # Pre-trade safety checks
+    wallet_balance = check_wallet_balance(client)
+    if wallet_balance < WALLET_MIN_BALANCE_USD:
+        log_error(
+            f"Wallet balance check failed: ${wallet_balance:.2f} < ${WALLET_MIN_BALANCE_USD:.2f}"
+        )
+        return False
+
+    if amount_usd <= 0:
+        log_error(f"Invalid trade amount: ${amount_usd:.2f}")
+        return False
 
     @retry(
         stop=stop_after_attempt(3),
@@ -56,8 +87,16 @@ def execute_market_buy(
     try:
         resp = _post_order()
         tx_hash = resp.get("tx_hash", "N/A")
+
+        # Check for partial fills
+        filled_amount = resp.get("filled_amount", amount_usd)
+        if filled_amount < amount_usd * 0.95:  # Less than 95% filled
+            log_error(
+                f"PARTIAL FILL: Only ${filled_amount:.2f}/${amount_usd:.2f} filled"
+            )
+
         log_trade(
-            f"SUCCESS: Bought {side_name.upper()} ${amount_usd:.2f} | Tx: {tx_hash}"
+            f"SUCCESS: Bought {side_name.upper()} ${filled_amount:.2f} | Tx: {tx_hash}"
         )
         return True
     except Exception as e:

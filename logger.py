@@ -1,5 +1,6 @@
-# logger.py - Fancy Rich CLI
+# logger.py - Fancy Rich CLI with structured JSON logging
 
+import json
 import logging
 import os
 from typing import Optional, Tuple
@@ -21,8 +22,18 @@ if not _std_logger.handlers:
     _std_logger.setLevel(logging.INFO)
     fh = logging.FileHandler(LOG_FILE)
     fh.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    fh.setFormatter(formatter)
+
+    # JSON formatter for structured logging
+    class JSONFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            log_obj = {
+                "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                "level": record.levelname,
+                "message": record.getMessage(),
+            }
+            return json.dumps(log_obj)
+
+    fh.setFormatter(JSONFormatter())
     _std_logger.addHandler(fh)
 
 # Reusable progress bar for time-left display to avoid recreating each render

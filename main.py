@@ -2,17 +2,27 @@
 
 import sys
 import time
+from typing import Optional
 
 from rich.live import Live
 
 from client import get_client
 from config import SCAN_INTERVAL, validate_config
+from data_store import TradeDatabase
+from execution import check_wallet_balance
 from logger import console, get_status_panel
 from markets import fetch_current_15min_btc_market
+from monitoring import TradeMetrics
+from risk.position_limits import PositionLimits
 from strategies.crowd_follower import CrowdFollowerStrategy
 
 # Global to track current slot unix (set in loop)
-current_slot_unix = None
+current_slot_unix: Optional[int] = None
+
+# Initialize persistence and monitoring
+_db = TradeDatabase()
+_metrics = TradeMetrics()
+_position_limits = PositionLimits()
 
 
 def main():
@@ -25,6 +35,10 @@ def main():
 
     console.print("[bold green]Crowd-following bot STARTED[/bold green]")
     client = get_client()
+
+    # Check wallet at startup
+    check_wallet_balance(client)
+
     strategy = CrowdFollowerStrategy(client)
 
     global current_slot_unix
@@ -67,6 +81,12 @@ def main():
                         total_time=900,
                     )
                 )
+
+                # Record market snapshot if edge was found
+                if edge_msg and "id" in market:
+                    _db.record_market_snapshot(
+                        market["id"], market, prices[0], prices[1], vig, vol
+                    )
 
             else:
                 live.update(
