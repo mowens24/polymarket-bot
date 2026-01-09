@@ -62,6 +62,15 @@ def log_error(message: str) -> None:
     _std_logger.error(message)
 
 
+def _sparkline(value: float, max_val: float = 100.0, width: int = 10) -> str:
+    """Generate a simple sparkline bar."""
+    if max_val == 0:
+        return "░" * width
+    filled = int((value / max_val) * width)
+    filled = min(filled, width)
+    return "█" * filled + "░" * (width - filled)
+
+
 # For fancy status panel
 def get_status_panel(
     market: Optional[dict] = None,
@@ -71,22 +80,34 @@ def get_status_panel(
     edge: Optional[str] = None,
     time_left: int = 0,
     total_time: int = 900,
+    position_status: Optional[dict] = None,
+    metrics: Optional[dict] = None,
 ) -> Panel:
-    table = Table(box=box.ROUNDED, show_header=False, padding=1, expand=True)
+    """Return a two-column status panel: market info (left) and metrics/positions (right)."""
+
+    left = Table(box=box.SIMPLE_HEAVY, show_header=False, padding=(0, 1))
+    right = Table(box=box.SIMPLE_HEAVY, show_header=False, padding=(0, 1))
 
     if market:
         question = market.get("question", "Unknown")
-        table.add_row("[bold magenta]Market[/bold magenta]", question)
-        table.add_row("[bold yellow]Volume[/bold yellow]", f"${vol:,.2f}")
+        left.add_row("[bold magenta]Market[/bold magenta]", question[:60])
+        left.add_row("[bold yellow]Volume[/bold yellow]", f"${vol:,.2f}")
         up, down = prices
-        table.add_row("[bold green]Up (Yes)[/bold green]", f"${up:.4f}")
-        table.add_row("[bold red]Down (No)[/bold red]", f"${down:.4f}")
-        table.add_row("[bold cyan]Vig[/bold cyan]", f"{vig:.3f}")
+
+        # Color code prices: green for high, red for low
+        up_color = "green" if up > 0.5 else "red"
+        down_color = "red" if down > 0.5 else "green"
+        left.add_row(f"[bold {up_color}]Up (Yes)[/bold {up_color}]", f"{up:.4f}")
+        left.add_row(f"[bold {down_color}]Down (No)[/bold {down_color}]", f"{down:.4f}")
+
+        # Vig with color: tight range is good (green), loose is risky (yellow)
+        vig_color = "green" if 0.98 <= vig <= 1.02 else "yellow"
+        left.add_row(f"[bold {vig_color}]Vig[/bold {vig_color}]", f"{vig:.3f}")
 
         if edge:
-            table.add_row("[bold bright_green]EDGE[/bold bright_green]", edge)
+            left.add_row("[bold bright_green]🔥 EDGE[/bold bright_green]", edge)
 
-        # Time left in slot progress bar (reuse a single Progress instance)
+        # Time left progress (single shared Progress)
         global _slot_task_id
         if _slot_task_id is None:
             _slot_task_id = slot_progress.add_task(
@@ -96,16 +117,53 @@ def get_status_panel(
             slot_progress.update(
                 _slot_task_id, total=total_time, completed=total_time - time_left
             )
-
-        table.add_row(slot_progress)
+        left.add_row("", slot_progress)
     else:
-        table.add_row(
-            "[bold red]Status[/bold red]", "No active slot - waiting for next..."
-        )
+        left.add_row("[bold red]Status[/bold red]", "No active slot - waiting...")
 
-    mode = "DRY RUN" if DRY_RUN else "[bold red]LIVE TRADING[/bold red]"
+    # Right column: metrics and positions with sparklines
+    if metrics:
+        right.add_row("[bold cyan]📊 Metrics[/bold cyan]", "")
+        trades = metrics.get("total_trades", 0)
+        right.add_row("Total Trades", str(trades))
+
+        daily_loss = metrics.get("daily_loss_usd", 0.0)
+        loss_color = "red" if daily_loss > 50 else "yellow" if daily_loss > 20 else "green"
+        right.add_row("Daily Loss", f"[{loss_color}]${daily_loss:.2f}[/{loss_color}]")
+
+        loss_streak = metrics.get("current_loss_streak", 0)
+        streak_color = "red" if loss_streak >= 3 else "yellow" if loss_streak > 0 else "green"
+        right.add_row("Loss Streak", f"[{streak_color}]{'🔴' * loss_streak or '✅'}[/{streak_color}]")
+    else:
+        right.add_row("[bold cyan]📊 Metrics[/bold cyan]", "Loading...")
+
+    if position_status:
+        right.add_row("[bold magenta]📍 Positions[/bold magenta]", "")
+        active = position_status.get("active_positions", 0)
+        right.add_row("Active", str(active))
+
+        exposure = position_status.get("total_exposure_usd", 0.0)
+        spark = _sparkline(exposure, max_val=100.0, width=10)
+        right.add_row("Exposure", f"{spark} ${exposure:.2f}")
+
+        daily_trades = position_status.get("daily_trades", 0)
+        right.add_row("Daily Trades", str(daily_trades))
+    else:
+        right.add_row("[bold magenta]📍 Positions[/bold magenta]", "Loading...")
+        right.add_row("[bold magenta]📍 Positions[/bold magenta]", "Loading...")
+
+    # Assemble main table with two columns
+    main = Table.grid(expand=True)
+    main.add_column(ratio=2)
+    main.add_column(ratio=1)
+    main.add_row(left, right)
+
+    mode = "🟢 DRY RUN" if DRY_RUN else "[bold red]🔴 LIVE[/bold red]"
     title = f"[bold blue]Polymarket 15m BTC Bot[/bold blue] | {mode}"
 
     return Panel(
-        table, title=title, subtitle="[dim]Crowd-following lopsides • Live update[/dim]"
+        main,
+        title=title,
+        subtitle="[dim]Crowd-following lopsides • Live update[/dim]",
+        border_style="blue",
     )

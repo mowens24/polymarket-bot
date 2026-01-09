@@ -85,7 +85,7 @@ class PositionLimits:
         self.daily_trade_count = 0
         log_info("Daily trade counters reset")
 
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> dict:
         """Return current position status."""
         return {
             "active_positions": len(self.active_positions),

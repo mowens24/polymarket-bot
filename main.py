@@ -79,6 +79,8 @@ def main():
                         edge=edge_msg,
                         time_left=time_left,
                         total_time=900,
+                        position_status=_position_limits.get_status(),
+                        metrics=_metrics.get_statistics(),
                     )
                 )
 
@@ -98,6 +100,8 @@ def main():
                         edge=None,
                         time_left=900,
                         total_time=900,
+                        position_status=_position_limits.get_status(),
+                        metrics=_metrics.get_statistics(),
                     )
                 )
                 current_slot_unix = None
