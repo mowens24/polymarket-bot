@@ -15,6 +15,17 @@ from logger import log_info
 from pricing import get_token_prices
 from risk.position_sizing import fixed_sizing
 
+# Minimum price floor for profitable trades
+MIN_PRICE_FLOOR = 0.75
+
+
+def is_price_acceptable(price: float, min_price: float = MIN_PRICE_FLOOR) -> bool:
+    """Check if price meets minimum threshold for safe trading."""
+    if price < min_price:
+        log_info(f"💰 Price ${price:.4f} below floor ${min_price:.2f} - skipping for safety")
+        return False
+    return True
+
 
 class CrowdFollowerStrategy:
     def __init__(self, client):

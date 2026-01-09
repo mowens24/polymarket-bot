@@ -14,7 +14,7 @@ from logger import console, get_pnl_panel, get_status_panel, log_info
 from markets import fetch_current_15min_btc_market
 from monitoring import PositionMonitor, TradeMetrics
 from risk.position_limits import PositionLimits
-from strategies.crowd_follower import CrowdFollowerStrategy
+from strategies.crowd_follower import CrowdFollowerStrategy, is_price_acceptable
 
 # Global to track current slot unix (set in loop)
 current_slot_unix: Optional[int] = None
@@ -67,9 +67,15 @@ def _process_market_cycle(market, strategy, position_monitor, position_limits, m
     if market_id != last_traded_market_id:
         _, _, _, edge_msg, edge_details = strategy.scan_for_edge(market)
         if edge_details:
-            strategy.execute_edge(edge_details, market)
-            last_traded_market_id = market_id
-            log_info(f"🔥 Trade executed, locking market {market_id[:16]} for this slot")
+            side, price = edge_details
+            # Check price floor before executing
+            if is_price_acceptable(price):
+                strategy.execute_edge(edge_details, market)
+                last_traded_market_id = market_id
+                log_info(f"🔥 Trade executed at ${price:.4f}, locking market {market_id[:16]} for this slot")
+            else:
+                # Edge found but price too low - don't execute yet
+                edge_msg = None
     else:
         log_info(f"✓ Already traded {market_id[:16]} this slot, updating P&L...")
 
