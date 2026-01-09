@@ -27,11 +27,10 @@ _position_limits = PositionLimits()
 _position_monitor = PositionMonitor()
 
 
-def _process_market_cycle(
-    market, strategy, position_monitor, position_limits, metrics, db,
-    last_traded_market_id, current_slot_unix
-):
-    """Process a single market scan cycle and return updated state."""
+def _process_market_cycle(market, strategy, position_monitor, position_limits, metrics, db):
+    """Process a single market scan cycle and update global trade state."""
+    global current_slot_unix, last_traded_market_id
+
     market_id = market.get("id")
     yes_price = float(market.get("yes", 0.5))
     no_price = float(market.get("no", 0.5))
@@ -78,7 +77,7 @@ def _process_market_cycle(
     if edge_msg and market_id:
         db.record_market_snapshot(market_id, market, yes_price, no_price, vig, vol)
 
-    return prices, vig, vol, edge_msg, time_left, last_traded_market_id, current_slot_unix
+    return prices, vig, vol, edge_msg, time_left
 
 
 def _update_display(
@@ -129,21 +128,20 @@ def main():
         refresh_per_second=2,
         console=console,
     ) as live:
-        _run_trading_loop(
-            live, strategy, last_traded_market_id, current_slot_unix
-        )
+        _run_trading_loop(live, strategy)
 
 
-def _run_trading_loop(live, strategy, last_traded_market_id, current_slot_unix):
+def _run_trading_loop(live, strategy):
     """Main trading loop."""
+    global current_slot_unix, last_traded_market_id
+
     while True:
         market = fetch_current_15min_btc_market()
         if market:
             # Process market and get updated state
-            prices, vig, vol, edge_msg, time_left, last_traded_market_id, current_slot_unix = (
+            prices, vig, vol, edge_msg, time_left = (
                 _process_market_cycle(
-                    market, strategy, _position_monitor, _position_limits, _metrics, _db,
-                    last_traded_market_id, current_slot_unix
+                    market, strategy, _position_monitor, _position_limits, _metrics, _db
                 )
             )
             display_panel = _update_display(
