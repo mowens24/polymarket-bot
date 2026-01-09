@@ -8,7 +8,7 @@ PREFERRED_SIDE = "yes"
 VIG_TOLERANCE_TIGHT = (0.98, 1.02)  # High volume
 VIG_TOLERANCE_LOOSE = (0.95, 1.05)  # Low volume
 MIN_VOLUME = 10000  # Higher threshold for prod
-SCAN_INTERVAL = 60
+SCAN_INTERVAL = 30
 
 # Safety limits
 DAILY_LOSS_LIMIT_USD = 50.0

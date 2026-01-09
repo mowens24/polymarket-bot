@@ -18,7 +18,7 @@ else:
     VIG_TOLERANCE_TIGHT = (0.98, 1.02)  # High volume markets
     VIG_TOLERANCE_LOOSE = (0.90, 1.10)  # Low volume markets
     MIN_VOLUME = 500
-    SCAN_INTERVAL = 10
+    SCAN_INTERVAL = 30
 
     # Safety limits
     DAILY_LOSS_LIMIT_USD = 200.0

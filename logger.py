@@ -167,3 +167,108 @@ def get_status_panel(
         subtitle="[dim]Crowd-following lopsides • Live update[/dim]",
         border_style="blue",
     )
+
+
+def get_pnl_panel(position_monitor) -> Panel:  # type: ignore[name-defined]
+    """Display live P&L on open positions and recent closed positions."""
+
+    # Open positions section
+    open_table = Table(
+        title="[bold cyan]📈 OPEN POSITIONS[/bold cyan]",
+        box=box.ROUNDED,
+        expand=False,
+    )
+    open_table.add_column("Market", style="cyan", width=20)
+    open_table.add_column("Side", width=6)
+    open_table.add_column("Shares", justify="right", width=10)
+    open_table.add_column("Entry $", justify="right", width=10)
+    open_table.add_column("Current $", justify="right", width=10)
+    open_table.add_column("P&L", justify="right", width=12)
+    open_table.add_column("Return %", justify="right", width=10)
+
+    positions = position_monitor.get_all_positions()
+    if positions:
+        for pos in positions:
+            # Fetch current price from latest market data if available
+            # For now, just show entry price; will update when price fetched
+            entry_price = pos.get("entry_price", 0)
+            current_price = pos.get("current_price", entry_price)
+            side = pos.get("side", "?")
+            shares = pos.get("shares", 0)
+
+            # Calculate P&L based on current price
+            if side == "yes":
+                pnl = (current_price - entry_price) * shares
+            else:
+                pnl = (entry_price - current_price) * shares
+
+            pct = ((pnl / (entry_price * shares)) * 100) if entry_price > 0 else 0
+            color = "green" if pnl >= 0 else "red"
+
+            open_table.add_row(
+                pos.get("market_name", "Unknown"),
+                f"[cyan]{side}[/cyan]",
+                f"{shares:.2f}",
+                f"${entry_price:.4f}",
+                f"${current_price:.4f}",
+                f"[{color}]${pnl:.2f}[/{color}]",
+                f"[{color}]{pct:+.1f}%[/{color}]",
+            )
+    else:
+        open_table.add_row("[dim]No open positions[/dim]", "", "", "", "", "", "")
+
+    # Closed positions section (last 5)
+    closed_table = Table(
+        title="[bold yellow]📊 CLOSED POSITIONS (Recent)[/bold yellow]",
+        box=box.ROUNDED,
+        expand=False,
+    )
+    closed_table.add_column("Market", style="yellow", width=20)
+    closed_table.add_column("Side", width=6)
+    closed_table.add_column("Entry $", justify="right", width=10)
+    closed_table.add_column("Exit $", justify="right", width=10)
+    closed_table.add_column("Realized P&L", justify="right", width=14)
+    closed_table.add_column("Return %", justify="right", width=10)
+
+    summary = position_monitor.get_summary()
+    closed_list = summary.get("closed_position_list", [])
+
+    if closed_list:
+        for pos in reversed(closed_list[-5:]):  # Show last 5 in reverse (newest first)
+            pnl = pos.get("realized_pnl", 0)
+            pct = pos.get("realized_pct", 0)
+            color = "green" if pnl >= 0 else "red"
+
+            closed_table.add_row(
+                pos.get("market_id", "Unknown"),
+                pos.get("side", "?"),
+                f"${pos.get('entry_price', 0):.4f}",
+                f"${pos.get('exit_price', 0):.4f}",
+                f"[{color}]${pnl:.2f}[/{color}]",
+                f"[{color}]{pct:+.1f}%[/{color}]",
+            )
+    else:
+        closed_table.add_row("[dim]No closed positions[/dim]", "", "", "", "", "")
+
+    # Summary stats
+    stats = Table(box=box.SIMPLE, expand=False)
+    stats.add_column("Metric", style="dim")
+    stats.add_column("Value", justify="right", style="bold cyan")
+
+    total_realized = summary.get("total_realized_pnl", 0)
+    color = "green" if total_realized >= 0 else "red"
+    stats.add_row("Total Realized P&L", f"[{color}]${total_realized:.2f}[/{color}]")
+    stats.add_row("Open Positions", str(summary.get("open_positions", 0)))
+    stats.add_row("Closed Positions", str(summary.get("closed_positions", 0)))
+
+    # Combine tables
+    content = Table.grid(expand=True)
+    content.add_row(open_table)
+    content.add_row(closed_table)
+    content.add_row(stats)
+
+    return Panel(
+        content,
+        title="[bold magenta]💰 REAL-TIME P&L MONITOR[/bold magenta]",
+        border_style="magenta",
+    )

@@ -1,6 +1,8 @@
-# execution.py - Order execution with safety checks, retries, and partial fill handling
+# execution.py - Order execution with safety checks, retries, and position tracking
 
-from typing import Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
 
 # Use tenacity for robust retries
 from tenacity import (
@@ -12,9 +14,13 @@ from tenacity import (
 from config import DRY_RUN, WALLET_MIN_BALANCE_USD
 from logger import log_error, log_trade
 
+if TYPE_CHECKING:
+    from monitoring import PositionMonitor
+
 # In DRY_RUN mode we keep a paper portfolio to simulate trades
 # _paper_portfolio may be None when not available
 _paper_portfolio: Optional["PaperPortfolio"] = None
+
 if DRY_RUN:
     try:
         from portfolio import PaperPortfolio
@@ -22,6 +28,15 @@ if DRY_RUN:
         _paper_portfolio = PaperPortfolio()
     except Exception:
         _paper_portfolio = None
+
+
+def set_position_monitor(position_monitor: PositionMonitor | None) -> None:
+    """Set the global position monitor reference (called from main.py)."""
+    global _position_monitor
+    _position_monitor = position_monitor
+
+
+_position_monitor: PositionMonitor | None = None
 
 
 def check_wallet_balance(client) -> float:
@@ -37,6 +52,40 @@ def check_wallet_balance(client) -> float:
     except Exception as e:
         log_error(f"Balance check failed: {e}")
         return 0.0
+
+
+def _record_dry_run_trade(
+    amount_usd: float,
+    price: Optional[float],
+    side_name: str,
+    market: Optional[dict],
+    paper_portfolio: Optional["PaperPortfolio"],
+    position_monitor: PositionMonitor | None,
+) -> None:
+    """Record a dry run trade in paper portfolio and position monitor."""
+    try:
+        if paper_portfolio and market is not None and price is not None:
+            paper_portfolio.add_position(market, side_name, amount_usd, price)
+    except Exception as e:
+        log_error(f"Paper portfolio record failed: {e}")
+
+    # Track in PositionMonitor for live P&L
+    try:
+        if (
+            position_monitor
+            and market is not None
+            and price is not None
+            and "id" in market
+        ):
+            shares = amount_usd / price
+            position_monitor.open_position(
+                market_id=market["id"],
+                side=side_name.lower(),
+                shares=shares,
+                entry_price=price,
+            )
+    except Exception as e:
+        log_error(f"Position monitor record failed: {e}")
 
 
 def execute_market_buy(
@@ -55,12 +104,7 @@ def execute_market_buy(
         log_trade(
             f"DRY RUN: Would buy {side_name.upper()} ${amount_usd:.2f} at ${price:.4f} | NO ORDER SENT"
         )
-        # Add to paper portfolio if available
-        try:
-            if _paper_portfolio and market is not None and price is not None:
-                _paper_portfolio.add_position(market, side_name, amount_usd, price)
-        except Exception as e:
-            log_error(f"Paper portfolio record failed: {e}")
+        _record_dry_run_trade(amount_usd, price, side_name, market, _paper_portfolio, _position_monitor)
         return True
 
     # Pre-trade safety checks
