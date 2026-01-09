@@ -32,8 +32,9 @@ def _process_market_cycle(market, strategy, position_monitor, position_limits, m
     global current_slot_unix, last_traded_market_id
 
     market_id = market.get("id")
-    yes_price = float(market.get("yes", 0.5))
-    no_price = float(market.get("no", 0.5))
+    # Use the correct field names from Gamma API (yes_price, no_price)
+    yes_price = float(market.get("yes_price", 0.5))
+    no_price = float(market.get("no_price", 0.5))
     prices = (yes_price, no_price)
     vig = yes_price + no_price
     vol = float(market.get("volume", 0))

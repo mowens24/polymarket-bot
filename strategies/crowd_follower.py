@@ -15,14 +15,25 @@ from logger import log_info
 from pricing import get_token_prices
 from risk.position_sizing import fixed_sizing
 
-# Minimum price floor for profitable trades
-MIN_PRICE_FLOOR = 0.75
+# Price range for optimal trading (binary options are 0.00 to 1.00)
+# Avoid extremes: too low (<0.25) = unlikely to win, too high (>0.75) = unlikely to improve
+MIN_PRICE_ACCEPTABLE = 0.25
+MAX_PRICE_ACCEPTABLE = 0.75
 
 
-def is_price_acceptable(price: float, min_price: float = MIN_PRICE_FLOOR) -> bool:
-    """Check if price meets minimum threshold for safe trading."""
-    if price < min_price:
-        log_info(f"💰 Price ${price:.4f} below floor ${min_price:.2f} - skipping for safety")
+def is_price_acceptable(price: float) -> bool:
+    """Check if price is in optimal range for trading.
+
+    Binary options prices range 0.00-1.00.
+    We want to avoid:
+    - Very low prices (<0.25): unlikely outcomes
+    - Very high prices (>0.75): unlikely to improve
+    """
+    if price < MIN_PRICE_ACCEPTABLE or price > MAX_PRICE_ACCEPTABLE:
+        log_info(
+            f"💰 Price ${price:.4f} outside optimal range "
+            f"[${MIN_PRICE_ACCEPTABLE:.2f}-${MAX_PRICE_ACCEPTABLE:.2f}] - skipping"
+        )
         return False
     return True
 
