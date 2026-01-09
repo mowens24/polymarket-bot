@@ -67,7 +67,7 @@ def _process_market_cycle(market, strategy, position_monitor, position_limits, m
     if market_id != last_traded_market_id:
         _, _, _, edge_msg, edge_details = strategy.scan_for_edge(market)
         if edge_details:
-            side, price = edge_details
+            price = edge_details.get("price", 0.0)
             # Check price floor before executing
             if is_price_acceptable(price):
                 strategy.execute_edge(edge_details, market)
