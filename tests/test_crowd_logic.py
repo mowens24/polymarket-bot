@@ -52,8 +52,14 @@ def test_buy_strongest_and_token(monkeypatch):
     monkeypatch.setattr(cf, "execute_market_buy", fake_buy)
 
     strat = cf.CrowdFollowerStrategy(client=None)
-    status = strat.scan_and_get_status(make_market())
-    assert status[3] is not None
+    market = make_market()
+    prices, vig, vol, edge_msg, edge_details = strat.scan_for_edge(market)
+    assert edge_msg is not None
+    assert edge_details is not None
+    assert edge_details["side"] == "yes"
+    assert edge_details["token_id"] == "ytoken"
+    # Execute to verify behavior
+    strat.execute_edge(edge_details, market)
     assert called["side"] == "yes"
     assert called["token"] == "ytoken"
 
@@ -73,15 +79,21 @@ def test_tie_prefers_configured_side(monkeypatch):
     monkeypatch.setattr(cf, "execute_market_buy", fake_buy)
 
     strat = cf.CrowdFollowerStrategy(client=None)
-    # Use dev config which has loose range [0.30, 0.90]
+    market = make_market()
     # default PREFERRED_SIDE is 'yes', should pick yes on tie
-    status = strat.scan_and_get_status(make_market())
-    assert status[3] is not None
+    prices, vig, vol, edge_msg, edge_details = strat.scan_for_edge(market)
+    assert edge_msg is not None
+    assert edge_details is not None
+    assert edge_details["side"] == "yes"
+    strat.execute_edge(edge_details, market)
     assert called["side"] == "yes"
 
     # Flip preference and ensure it picks 'no' on tie
     strat.config.PREFERRED_SIDE = "no"
     called.clear()
-    status = strat.scan_and_get_status(make_market())
-    assert status[3] is not None
+    prices, vig, vol, edge_msg, edge_details = strat.scan_for_edge(market)
+    assert edge_msg is not None
+    assert edge_details is not None
+    assert edge_details["side"] == "no"
+    strat.execute_edge(edge_details, market)
     assert called["side"] == "no"
